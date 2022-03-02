@@ -48,14 +48,19 @@ func handleStream(stream io.ReadWriteCloser) (err error) {
 
 func builtinEcho(hash string, stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
-	scanner := bufio.NewScanner(stream)
+	/*
+		scanner := bufio.NewScanner(stream)
 
-	for scanner.Scan() {
-		_, err = stream.Write(scanner.Text())
+		for scanner.Scan() {
+			_, err = stream.Write(Spf("%s\n", scanner.Text()))
+			Ck(err)
+		}
+
+		err = scanner.Err()
 		Ck(err)
-	}
+	*/
 
-	err = scanner.Err()
+	_, err = io.Copy(stream, stream)
 	Ck(err)
 	return
 }
