@@ -1,7 +1,4 @@
-# Project T-438
-
-Pattern for Universal Protocols (PUP working title)
-
+# Pattern for Universal Protocols (PUP)
 
 ## sample message
 
