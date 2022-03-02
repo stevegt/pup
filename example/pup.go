@@ -32,7 +32,7 @@ func handleTcp(conn net.Conn) {
 	}
 }
 
-func handleStream(stream io.Reader) (err error) {
+func handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
 	// read the leading hash
 	r := bufio.NewReader(stream)
@@ -42,16 +42,17 @@ func handleStream(stream io.Reader) (err error) {
 
 	// lookup the hash in peer registrations
 	// pipe the rest of the stream to the peer
-	err = builtinDummy(hash, stream)
+	err = builtinEcho(hash, stream)
 	return
 }
 
-func builtinDummy(hash string, reader io.Reader) (err error) {
+func builtinEcho(hash string, stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
-	scanner := bufio.NewScanner(reader)
+	scanner := bufio.NewScanner(stream)
 
 	for scanner.Scan() {
-		Pl(scanner.Text())
+		_, err = stream.Write(scanner.Text())
+		Ck(err)
 	}
 
 	err = scanner.Err()
