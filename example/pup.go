@@ -8,7 +8,25 @@ import (
 	. "github.com/stevegt/goadapt"
 )
 
-func Serve(host string, port int) {
+type Server struct {
+	registry *Registry
+}
+
+func (s *Server) Register(hash string, lambda Lambda) {
+	if s.registry == nil {
+		s.registry = &Registry{}
+	}
+	s.registry.Put(hash, lambda)
+}
+
+func (s *Server) Dereference(hash string) (lambda Lambda) {
+	if s.registry == nil {
+		s.registry = new(Registry)
+	}
+	return s.registry.Get(hash)
+}
+
+func (s *Server) Serve(host string, port int) {
 	l, err := net.Listen("tcp", Spf("%s:%d", host, port))
 	Ck(err)
 	defer l.Close()
@@ -19,17 +37,38 @@ func Serve(host string, port int) {
 		if err != nil {
 			Pl("error accepting:", err.Error())
 		}
-		go handleTcp(conn)
+		go s.handleTcp(conn)
 	}
 }
 
-func handleTcp(conn net.Conn) {
+func (s *Server) handleTcp(conn net.Conn) {
 	// XXX deal with whitelist/blacklist here
-	err := handleStream(conn)
+	err := s.handleStream(conn)
 	if err != nil {
 		Pl("error handling stream:", err.Error())
 		return
 	}
+}
+
+var ENOSYS = errors.New("function not implemented")
+
+func (s *Server) handleStream(stream io.ReadWriteCloser) (err error) {
+	defer Return(&err)
+
+	// read the leading hash
+	hash, err := readLine(stream, 1024)
+	Ck(err)
+
+	// get lambda by looking up the hash in the registry
+	lambda := s.Dereference(string(hash))
+
+	if lambda == nil {
+		return ENOSYS
+	}
+
+	// pipe the rest of the stream to the lambda
+	err = lambda(hash, stream)
+	return
 }
 
 var ELONGLINE = errors.New("no newline found -- would overflow readLine output buffer")
@@ -55,41 +94,12 @@ type Lambda func([]byte, io.ReadWriteCloser) error
 
 type Registry map[string]Lambda
 
+func (r *Registry) Put(hash string, lambda Lambda) {
+	(*r)[hash] = lambda
+	return
+}
+
 func (r *Registry) Get(hash string) (lambda Lambda) {
 	lambda, _ = (*r)[hash]
-	return
-}
-
-var registry = Registry{
-	"somehash":    echoContent,
-	"anotherhash": echoHash,
-}
-
-func handleStream(stream io.ReadWriteCloser) (err error) {
-	defer Return(&err)
-
-	// read the leading hash
-	hash, err := readLine(stream, 1024)
-	Ck(err)
-
-	// get lambda by looking up the hash in the registry
-	lambda := registry.Get(string(hash))
-
-	// pipe the rest of the stream to the lambda
-	err = lambda(hash, stream)
-	return
-}
-
-func echoContent(hash []byte, stream io.ReadWriteCloser) (err error) {
-	defer Return(&err)
-	_, err = io.Copy(stream, stream)
-	Ck(err)
-	return
-}
-
-func echoHash(hash []byte, stream io.ReadWriteCloser) (err error) {
-	defer Return(&err)
-	_, err = stream.Write(hash)
-	Ck(err)
 	return
 }

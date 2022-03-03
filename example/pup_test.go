@@ -47,14 +47,33 @@ var s2 = Spf("%s\n%s", s2hash, s2content)
 
 func TestStream(t *testing.T) {
 
+	s := &Server{}
+
+	s.Register("somehash", echoContent)
+	s.Register("anotherhash", echoHash)
+
 	rwc := &MockReadWriteCloser{readbuf: []byte(s1)}
-	err := handleStream(rwc)
+	err := s.handleStream(rwc)
 	Tassert(t, err == nil, "handleStream %v", err)
 	Tassert(t, string(rwc.writebuf) == s1content, "writebuf '%v'", string(rwc.writebuf))
 
 	rwc = &MockReadWriteCloser{readbuf: []byte(s2)}
-	err = handleStream(rwc)
+	err = s.handleStream(rwc)
 	Tassert(t, err == nil, "handleStream %v", err)
 	Tassert(t, string(rwc.writebuf) == s2hash, "writebuf '%v'", string(rwc.writebuf))
 
+}
+
+func echoContent(hash []byte, stream io.ReadWriteCloser) (err error) {
+	defer Return(&err)
+	_, err = io.Copy(stream, stream)
+	Ck(err)
+	return
+}
+
+func echoHash(hash []byte, stream io.ReadWriteCloser) (err error) {
+	defer Return(&err)
+	_, err = stream.Write(hash)
+	Ck(err)
+	return
 }
