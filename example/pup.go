@@ -49,6 +49,12 @@ func readLine(buf []byte, stream io.Reader) (n int, err error) {
 	return n, ELONGLINE
 }
 
+type Builtins map[string]func([]byte, io.ReadWriteCloser) error
+
+var builtins = Builtins{
+	"somehash": echoContent,
+}
+
 func handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
 	// read the leading hash
