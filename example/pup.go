@@ -1,7 +1,7 @@
 package pup
 
 import (
-	"bufio"
+	"errors"
 	"io"
 	"net"
 
@@ -32,11 +32,28 @@ func handleTcp(conn net.Conn) {
 	}
 }
 
+var ELONGLINE = errors.New("no newline found -- would overflow readLine output buffer")
+
+func readLine(buf []byte, stream io.Reader) (err error) {
+	c := make([]byte, 1)
+	for i := 0; i < len(buf); i++ {
+		_, err = stream.Read(c)
+		if err != nil {
+			return
+		}
+		if c[0] == '\n' {
+			return
+		}
+		buf[i] = c[0]
+	}
+	return ELONGLINE
+}
+
 func handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
 	// read the leading hash
-	r := bufio.NewReader(stream)
-	hash, err := r.ReadString('\n')
+	hash := make([]byte, 1024)
+	readLine(hash, stream)
 	Ck(err)
 	// lookup the hash in the builtins
 
@@ -46,20 +63,8 @@ func handleStream(stream io.ReadWriteCloser) (err error) {
 	return
 }
 
-func builtinEcho(hash string, stream io.ReadWriteCloser) (err error) {
+func builtinEcho(hash []byte, stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
-	/*
-		scanner := bufio.NewScanner(stream)
-
-		for scanner.Scan() {
-			_, err = stream.Write(Spf("%s\n", scanner.Text()))
-			Ck(err)
-		}
-
-		err = scanner.Err()
-		Ck(err)
-	*/
-
 	_, err = io.Copy(stream, stream)
 	Ck(err)
 	return
