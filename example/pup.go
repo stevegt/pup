@@ -59,13 +59,20 @@ func handleStream(stream io.ReadWriteCloser) (err error) {
 
 	// lookup the hash in peer registrations
 	// pipe the rest of the stream to the peer
-	err = builtinEcho(hash, stream)
+	err = echoContent(hash, stream)
 	return
 }
 
-func builtinEcho(hash []byte, stream io.ReadWriteCloser) (err error) {
+func echoContent(hash []byte, stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
 	_, err = io.Copy(stream, stream)
+	Ck(err)
+	return
+}
+
+func echoHash(hash []byte, stream io.ReadWriteCloser) (err error) {
+	defer Return(&err)
+	_, err = stream.Write(append(hash, byte('\n')))
 	Ck(err)
 	return
 }
