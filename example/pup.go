@@ -34,38 +34,49 @@ func handleTcp(conn net.Conn) {
 
 var ELONGLINE = errors.New("no newline found -- would overflow readLine output buffer")
 
-func readLine(buf []byte, stream io.Reader) (n int, err error) {
+func readLine(stream io.Reader, max int) (line []byte, err error) {
 	c := make([]byte, 1)
+	buf := make([]byte, max)
+	var n int
 	for n = 0; n < len(buf); n++ {
 		_, err = stream.Read(c)
 		if err != nil {
-			return
+			return buf[:n], err
 		}
 		if c[0] == '\n' {
-			return
+			return buf[:n], err
 		}
 		buf[n] = c[0]
 	}
-	return n, ELONGLINE
+	return buf[:n], ELONGLINE
 }
 
-type Builtins map[string]func([]byte, io.ReadWriteCloser) error
+type Lambda func([]byte, io.ReadWriteCloser) error
 
-var builtins = Builtins{
-	"somehash": echoContent,
+type Registry map[string]Lambda
+
+func (r *Registry) Get(hash string) (lambda Lambda) {
+	lambda, _ = (*r)[hash]
+	return
+}
+
+var registry = Registry{
+	"somehash":    echoContent,
+	"anotherhash": echoHash,
 }
 
 func handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
-	// read the leading hash
-	hash := make([]byte, 1024)
-	_, err = readLine(hash, stream)
-	Ck(err)
-	// lookup the hash in the builtins
 
-	// lookup the hash in peer registrations
-	// pipe the rest of the stream to the peer
-	err = echoContent(hash, stream)
+	// read the leading hash
+	hash, err := readLine(stream, 1024)
+	Ck(err)
+
+	// get lambda by looking up the hash in the registry
+	lambda := registry.Get(string(hash))
+
+	// pipe the rest of the stream to the lambda
+	err = lambda(hash, stream)
 	return
 }
 
@@ -78,7 +89,7 @@ func echoContent(hash []byte, stream io.ReadWriteCloser) (err error) {
 
 func echoHash(hash []byte, stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
-	_, err = stream.Write(append(hash, byte('\n')))
+	_, err = stream.Write(hash)
 	Ck(err)
 	return
 }

@@ -41,9 +41,20 @@ var s1hash = "somehash"
 var s1content = "first line\nsecond line\n"
 var s1 = Spf("%s\n%s", s1hash, s1content)
 
+var s2hash = "anotherhash"
+var s2content = "1 first line\n2 second line\n"
+var s2 = Spf("%s\n%s", s2hash, s2content)
+
 func TestStream(t *testing.T) {
+
 	rwc := &MockReadWriteCloser{readbuf: []byte(s1)}
 	err := handleStream(rwc)
 	Tassert(t, err == nil, "handleStream %v", err)
 	Tassert(t, string(rwc.writebuf) == s1content, "writebuf '%v'", string(rwc.writebuf))
+
+	rwc = &MockReadWriteCloser{readbuf: []byte(s2)}
+	err = handleStream(rwc)
+	Tassert(t, err == nil, "handleStream %v", err)
+	Tassert(t, string(rwc.writebuf) == s2hash, "writebuf '%v'", string(rwc.writebuf))
+
 }
