@@ -34,9 +34,9 @@ func handleTcp(conn net.Conn) {
 
 var ELONGLINE = errors.New("no newline found -- would overflow readLine output buffer")
 
-func readLine(buf []byte, stream io.Reader) (err error) {
+func readLine(buf []byte, stream io.Reader) (n int, err error) {
 	c := make([]byte, 1)
-	for i := 0; i < len(buf); i++ {
+	for n = 0; n < len(buf); n++ {
 		_, err = stream.Read(c)
 		if err != nil {
 			return
@@ -44,16 +44,16 @@ func readLine(buf []byte, stream io.Reader) (err error) {
 		if c[0] == '\n' {
 			return
 		}
-		buf[i] = c[0]
+		buf[n] = c[0]
 	}
-	return ELONGLINE
+	return n, ELONGLINE
 }
 
 func handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
 	// read the leading hash
 	hash := make([]byte, 1024)
-	readLine(hash, stream)
+	_, err = readLine(hash, stream)
 	Ck(err)
 	// lookup the hash in the builtins
 

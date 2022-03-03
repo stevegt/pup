@@ -17,6 +17,8 @@ func (c *MockReadWriteCloser) Read(out []byte) (n int, err error) {
 	if c.readpos >= len(c.readbuf) {
 		return 0, io.EOF
 	}
+	// set end to the end of the readbuf or out, depending on which comes
+	// first
 	end := c.readpos + len(out)
 	if end > len(c.readbuf) {
 		end = len(c.readbuf)
