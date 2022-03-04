@@ -2,7 +2,9 @@ package pup
 
 import (
 	"io"
+	"net"
 	"testing"
+	"time"
 
 	. "github.com/stevegt/goadapt"
 )
@@ -37,6 +39,20 @@ func (c *MockReadWriteCloser) Close() error {
 	return nil
 }
 
+func echoContent(hash []byte, stream io.ReadWriteCloser) (err error) {
+	defer Return(&err)
+	_, err = io.Copy(stream, stream)
+	Ck(err)
+	return
+}
+
+func echoHash(hash []byte, stream io.ReadWriteCloser) (err error) {
+	defer Return(&err)
+	_, err = stream.Write(hash)
+	Ck(err)
+	return
+}
+
 var s1hash = "somehash"
 var s1content = "first line\nsecond line\n"
 var s1 = Spf("%s\n%s", s1hash, s1content)
@@ -64,16 +80,28 @@ func TestStream(t *testing.T) {
 
 }
 
-func echoContent(hash []byte, stream io.ReadWriteCloser) (err error) {
-	defer Return(&err)
-	_, err = io.Copy(stream, stream)
-	Ck(err)
-	return
-}
+func TestServer(t *testing.T) {
+	port := 10842
+	go func() {
+		s := &Server{}
+		s.Register("somehash", echoContent)
+		err := s.Serve("127.0.0.1", port)
+		Tassert(t, err == nil, "Serve: %v", err)
+	}()
+	time.Sleep(1 * time.Second)
 
-func echoHash(hash []byte, stream io.ReadWriteCloser) (err error) {
-	defer Return(&err)
-	_, err = stream.Write(hash)
-	Ck(err)
-	return
+	conn, err := net.Dial("tcp", Spf(":%d", port))
+	Tassert(t, err == nil, "Dial: %v", err)
+	defer conn.Close()
+
+	go func() {
+		_, err := conn.Write([]byte(s1))
+		Tassert(t, err == nil, "conn.Write: %v", err)
+	}()
+	time.Sleep(1 * time.Second)
+
+	got := make([]byte, 1024)
+	n, err := conn.Read(got)
+	Tassert(t, string(got[:n]) == s1content, "wanted '%v' got '%v'", []byte(s1content), got)
+
 }

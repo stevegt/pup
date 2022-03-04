@@ -9,24 +9,25 @@ import (
 )
 
 type Server struct {
-	registry *Registry
+	registry *registry
 }
 
 func (s *Server) Register(hash string, lambda Lambda) {
 	if s.registry == nil {
-		s.registry = &Registry{}
+		s.registry = &registry{}
 	}
-	s.registry.Put(hash, lambda)
+	s.registry.put(hash, lambda)
 }
 
 func (s *Server) Dereference(hash string) (lambda Lambda) {
 	if s.registry == nil {
-		s.registry = new(Registry)
+		s.registry = new(registry)
 	}
-	return s.registry.Get(hash)
+	return s.registry.get(hash)
 }
 
-func (s *Server) Serve(host string, port int) {
+func (s *Server) Serve(host string, port int) (err error) {
+	defer Return(&err)
 	l, err := net.Listen("tcp", Spf("%s:%d", host, port))
 	Ck(err)
 	defer l.Close()
@@ -92,14 +93,14 @@ func readLine(stream io.Reader, max int) (line []byte, err error) {
 
 type Lambda func([]byte, io.ReadWriteCloser) error
 
-type Registry map[string]Lambda
+type registry map[string]Lambda
 
-func (r *Registry) Put(hash string, lambda Lambda) {
+func (r *registry) put(hash string, lambda Lambda) {
 	(*r)[hash] = lambda
 	return
 }
 
-func (r *Registry) Get(hash string) (lambda Lambda) {
+func (r *registry) get(hash string) (lambda Lambda) {
 	lambda, _ = (*r)[hash]
 	return
 }
