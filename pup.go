@@ -4,9 +4,15 @@ import (
 	"errors"
 	"io"
 	"net"
+	"syscall"
 
 	. "github.com/stevegt/goadapt"
 )
+
+type Registration struct {
+	Hash   string
+	Lambda Lambda
+}
 
 type Server struct {
 	registry *registry
@@ -24,6 +30,13 @@ func (s *Server) Dereference(hash string) (lambda Lambda) {
 		s.registry = new(registry)
 	}
 	return s.registry.get(hash)
+}
+
+func (s *Server) Registrations() (res []Registration) {
+	if s.registry == nil {
+		s.registry = new(registry)
+	}
+	return s.registry.ls()
 }
 
 func (s *Server) Serve(host string, port int) (err error) {
@@ -51,7 +64,14 @@ func (s *Server) handleTcp(conn net.Conn) {
 	}
 }
 
-var ENOSYS = errors.New("function not implemented")
+type Error struct {
+	Errno syscall.Errno
+	Msg   string
+}
+
+func (e Error) Error() string {
+	return Spf("%s: %s", e.Errno.Error(), e.Msg)
+}
 
 func (s *Server) handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
@@ -64,7 +84,7 @@ func (s *Server) handleStream(stream io.ReadWriteCloser) (err error) {
 	lambda := s.Dereference(string(hash))
 
 	if lambda == nil {
-		return ENOSYS
+		return Error{syscall.ENOSYS, string(hash)}
 	}
 
 	// pipe the rest of the stream to the lambda
@@ -102,5 +122,12 @@ func (r *registry) put(hash string, lambda Lambda) {
 
 func (r *registry) get(hash string) (lambda Lambda) {
 	lambda, _ = (*r)[hash]
+	return
+}
+
+func (r *registry) ls() (res []Registration) {
+	for k, v := range *r {
+		res = append(res, Registration{k, v})
+	}
 	return
 }

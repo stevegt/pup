@@ -52,8 +52,9 @@ func peer(t *testing.T) (err error) {
 func TestDispatcher(t *testing.T) {
 
 	// start dispatcher
+	d := Dispatcher{}
 	go func() {
-		err := Dispatcher("127.0.0.1", port)
+		err := d.Dispatch("127.0.0.1", port)
 		Tassert(t, err == nil, "Dispatcher: %v", err)
 	}()
 	time.Sleep(1 * time.Second)
@@ -62,6 +63,11 @@ func TestDispatcher(t *testing.T) {
 	// just echoes back the content of any message sent to it
 	go peer(t)
 	time.Sleep(1 * time.Second)
+
+	// show registration list
+	for k, v := range d.server.Registrations() {
+		Pf("registration: %v, %v\n", k, v)
+	}
 
 	// connect to dispatcher
 	conn, err := net.Dial("tcp", Spf(":%d", port))
