@@ -57,7 +57,7 @@ func (s *Server) handleStream(stream io.ReadWriteCloser) (err error) {
 	defer Return(&err)
 
 	// read the leading hash
-	hash, err := readLine(stream, 1024)
+	hash, err := Readline(stream, 1024)
 	Ck(err)
 
 	// get lambda by looking up the hash in the registry
@@ -72,9 +72,9 @@ func (s *Server) handleStream(stream io.ReadWriteCloser) (err error) {
 	return
 }
 
-var ELONGLINE = errors.New("no newline found -- would overflow readLine output buffer")
+var ELONGLINE = errors.New("no newline found -- would overflow Readline output buffer")
 
-func readLine(stream io.Reader, max int) (line []byte, err error) {
+func Readline(stream io.Reader, max int) (line []byte, err error) {
 	c := make([]byte, 1)
 	buf := make([]byte, max)
 	var n int
