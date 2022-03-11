@@ -52,7 +52,9 @@ func (d *Dispatcher) registrar(hash []byte, peer io.ReadWriteCloser) (err error)
 	return
 }
 
-// proxy routes traffic between caller and peer
+// proxy routes messages between publisher and subscribers
+// XXX or we do use streams instead of messages, and
+// maintain/contract for virtual circuits
 func proxy(caller, peer io.ReadWriteCloser) {
 	// XXX might need to do something more useful with io.Copy errors
 	go func() {
