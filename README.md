@@ -31,7 +31,7 @@ BID .05 TMP sha256:78das876d bar az arg3
 
 somestdin lksadfj
 
-shar256:876876c8a76s...
+sha256:876876c8a76s...
 
 linux 5.2 amd4 ivybridge CUDA
 
