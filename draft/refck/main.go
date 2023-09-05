@@ -3,10 +3,13 @@ package main
 import (
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	. "github.com/stevegt/goadapt"
+	"github.com/stevegt/grokker"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
@@ -20,9 +23,11 @@ func main() {
 
 	doc := parse(inbuf)
 	concepts := doc.getSection("Concepts")
-	citations := doc.getSection("References")
-	concepts.ckForwards(citations)
+	concepts.ckForwards()
 	concepts.ckUnrefs()
+	doc.ckCitations()
+	doc.showTodos()
+	// doc.showTerms(fn)
 }
 
 // parse simply parses the input buffer and returns a Node tree
@@ -141,9 +146,14 @@ func (node *Node) isRef() bool {
 	raw := node.raw()
 	// look for the raw text of the link including both sets
 	// of square brackets
-	retxt := Spf(`\[%s\]\[%s\]`, display, display)
+	retxt := Spf(`\[%s\]\[(\S+)\]`, display)
 	re := regexp.MustCompile(retxt)
-	return re.MatchString(raw)
+	// if we find a match, it's a citation reference
+	matches := re.FindStringSubmatch(raw)
+	if len(matches) > 0 {
+		return true
+	}
+	return false
 }
 
 // text returns the text string for the node
@@ -380,12 +390,9 @@ func (section *Section) mapReferences() (refs map[string]*Node) {
 	return
 }
 
-// mapCitations returns a map of citations in the given section
-// func (section *Section) mapCitations() (citations map[string]*Node) {
-
-// ckForwards checks for forward references and references that have
-// no heading or citation
-func (section *Section) ckForwards(citations *Section) {
+// ckForwards checks the section for forward references and references
+// that have no heading or citation
+func (section *Section) ckForwards() {
 	heads := section.mapHeadings()
 	refs := section.mapReferences()
 	// Pprint(refs)
@@ -393,7 +400,7 @@ func (section *Section) ckForwards(citations *Section) {
 		head, ok := heads[key]
 		if !ok {
 			if ref.isRef() {
-				Pl("XXX check citation:", key)
+				// Pl("XXX check citation:", key)
 			} else {
 				Pl("reference has no heading:", key)
 			}
@@ -427,7 +434,16 @@ func (section *Section) ckForwards(citations *Section) {
 func (section *Section) ckUnrefs() {
 	heads := section.mapHeadings()
 	refs := section.mapReferences()
-	for key, _ := range heads {
+	// sort heads by position
+	sortedHeads := make([]*Node, 0, len(heads))
+	for _, head := range heads {
+		sortedHeads = append(sortedHeads, head)
+	}
+	sort.Slice(sortedHeads, func(i, j int) bool {
+		return sortedHeads[i].pos() < sortedHeads[j].pos()
+	})
+	for _, node := range sortedHeads {
+		key := node.key()
 		// Pl(section.String(), "has heading:", key)
 		if key == section.key() {
 			// skip the section heading
@@ -441,111 +457,157 @@ func (section *Section) ckUnrefs() {
 	}
 }
 
-/*
-// ckrefs checks references and headings
-func (doc *Node) ckrefs() {
-	// get headings and references
-	headings, refs := mapHeadRefs(doc)
+// ckCitations checks for citations that have no entry in the
+// References section.
+func (doc *Node) ckCitations() {
+	// get the start of the References section
+	refSection := doc.getSection("References")
 
-	// ckref checks references and headings
+	// okay, we aren't using goldmark for this because goldmark is too
+	// smart by half when parsing links; in the case of GFM reference
+	// links, it conflates the link text with the link destination.
+	// That all fine, but if the link text is a citation, and the
+	// citation is missing, then goldmark ignores it.  So we grunt
+	// through this using the raw text of the document and some
+	// regular expressions instead.
 
-	// check for unreferenced headings
-	for key, heading := range headings {
-		// skip if the heading is not in the concepts section
+	// get the raw text of the References section
+	// - we make the possibly incorrect assumption that the
+	//   References section is the last section in the document
+	refStart := refSection.nodes[0].pos()
+	rawRefs := doc.source[refStart:]
+	// Pl("rawRefs:", string(rawRefs))
 
-		if !heading.inConcepts {
-			_, ok := refs[key]
-			if !ok {
-				Pf("unreferenced heading: %s\n", key)
+	// find all citations in the document
+	// - a citation is a link with the format [id][id]
+	re := regexp.MustCompile(`\[([\s\w]+)\]\s*\[([\s\w]+)\]`)
+	citations := re.FindAllStringSubmatch(string(doc.source), -1)
+	// Pl("citations:", citations)
+
+	// check each citation
+	for _, citation := range citations {
+		// Pl("citation:", citation)
+		// make sure both ids are the same
+		/*
+			if citation[1] != citation[2] {
+				Pl("citation ids don't match:", citation[1], citation[2])
+			}
+		*/
+		id := citation[2]
+		// check if the citation is in the References section
+		resrc := `\[` + id + `\]:\s+`
+		re := regexp.MustCompile(resrc)
+		if !re.Match(rawRefs) {
+			Pl("reference has no citation:", citation[0])
+		}
+	}
+
+}
+
+// showTodos shows all TODO and XXX marks in the document, with line numbers
+func (doc *Node) showTodos() {
+	// iterate over the lines in the document
+	// - we do this using a line scanner instead of the AST because
+	//   the AST doesn't preserve line numbers
+	lines := strings.Split(string(doc.source), "\n")
+	for i, line := range lines {
+		hit := false
+		// check for TODO
+		if strings.Contains(line, "TODO") {
+			hit = true
+		}
+		// check for XXX
+		if strings.Contains(line, "XXX") {
+			hit = true
+		}
+		if hit {
+			Pf("%5d: %s\n", i+1, line)
+		}
+	}
+	return
+}
+
+// showTodos shows all TODO and XXX marks in the document
+func (doc *Node) XXXshowTodos() {
+	// walk the doc
+	doc.walk(func(node *Node) (stop bool) {
+		if !node.isBlock() {
+			return
+		}
+		// get the lines for the node
+		segments := node.astNode.Lines()
+		// iterate over the segments
+		for i := 0; i < segments.Len(); i++ {
+			segment := segments.At(i)
+			// get the raw text of the segment
+			txt := string(segment.Value(doc.source))
+			hit := false
+			// check for TODO
+			if strings.Contains(txt, "TODO") {
+				hit = true
+			}
+			// check for XXX
+			if strings.Contains(txt, "XXX") {
+				hit = true
+			}
+			if hit {
+				Pl("TODO:", txt)
 			}
 		}
+		return
+	})
+}
 
-		// check for forward references (references before headings)
-		for key, link := range links {
-			_, ok := headings[key]
-			if !ok {
-				Pf("link to missing heading: %s\n", key)
-			}
+// showTerms shows all terms in the document that are not defined in
+// the same document.
+func (doc *Node) showTerms(fn string) {
+
+	// walk the doc, collecting text blocks
+	txts := make([]string, 0)
+	doc.walk(func(node *Node) (stop bool) {
+		if !node.isBlock() {
+			return
 		}
-
-		// parseConcepts parses the Concepts section of the document
-		// - returns a map of headings and a map of references
-
-		// walk the tree looking for headings and references
-		headings := make(map[string]*ast.Heading)
-		links := make(map[string]*ast.Link)
-		inConcepts := false
-		walker := func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-			// Pf("node: %T, entering: %v\n", node, entering)
-			if entering {
-				switch node.(type) {
-				case *ast.Heading:
-					// get position of the heading
-					lines := node.Lines()
-					start := lines.At(0).Start
-					Pf("start: %d\n", start)
-
-					// add the heading to the map
-					// - the key is the heading text
-					// - the value is the heading node
-					// - if the heading is already in the map, print a message
-					key := string(node.Text(txt.Source()))
-					// look for the concepts section
-					if key == "Concepts" {
-						inConcepts = true
-						return ast.WalkContinue, nil
-					}
-					// skip headings that are not in the concepts section
-					if !inConcepts {
-						return ast.WalkContinue, nil
-					}
-					// lowercase
-					key = strings.ToLower(key)
-					// replace spaces with hyphens
-					key = strings.Replace(key, " ", "-", -1)
-					_, ok := headings[key]
-					if ok {
-						Pf("Duplicate heading: %s\n", key)
-					} else {
-						// Pf("Adding heading: %s\n", key)
-						headings[key] = node.(*ast.Heading)
-					}
-				case *ast.Link:
-					// check the headings map for the reference
-					// - if the reference is not in the map, print a message
-					key := string(node.(*ast.Link).Destination)
-					// skip if the link is not to a heading
-					if key[0] != '#' {
-						return ast.WalkContinue, nil
-					}
-					// remove the leading '#'
-					key = key[1:]
-					// add it to the links map
-					links[key] = node.(*ast.Link)
-					// Pf("Checking reference: %s\n", key)
-					_, ok := headings[key]
-					if ok {
-						// Pf("reference after heading: %s\n", key)
-					} else {
-						Pf("reference before heading: %s\n", key)
-					}
-				}
-			} else {
-				switch node.(type) {
-				case *ast.Heading:
-					// watch for when we leave the concepts section
-					key := string(node.Text(txt.Source()))
-					if key == "Concepts" {
-						inConcepts = false
-					}
-				}
-			}
-			return ast.WalkContinue, nil
+		// get the lines for the node
+		segments := node.astNode.Lines()
+		// iterate over the segments
+		for i := 0; i < segments.Len(); i++ {
+			segment := segments.At(i)
+			// get the raw text of the segment
+			txt := string(segment.Value(doc.source))
+			txts = append(txts, txt)
 		}
+		return
+	})
 
-		err := ast.Walk(doc, walker)
+	// concatenate the text blocks into larger blocks of < 7000 tokens
+	// - this is to avoid hitting the limit on the number of tokens
+	//   that can be sent to an 8k grokker; we allow around 1k tokens
+	//   for the response
+	// - XXX we don't have a token counter yet, so we just use the
+	//   length of the text / 3 as an estimate
+	maxLen := 7000 / 3
+	bigTxts := make([]string, 0)
+	bigTxt := ""
+	for _, txt := range txts {
+		if len(bigTxt)+len(txt) < maxLen {
+			bigTxt += txt
+		} else {
+			bigTxts = append(bigTxts, bigTxt)
+			bigTxt = txt
+		}
+	}
+
+	// send the prompt with each big text to grokker and show the results
+	basename := filepath.Base(fn)
+	prompt := Spf("List all terms used below that are not lay terms and that are not defined in %s.  Make the list in markdown format, one hyphen bullet point per term.", basename)
+	Pl("undefined terms:")
+	grok, _, _, _, err := grokker.Load()
+	Ck(err)
+	for _, bigTxt := range bigTxts {
+		query := Spf("%s\n\n%s", prompt, bigTxt)
+		res, err := grok.Answer(query, false)
 		Ck(err)
-
+		Pl(res)
 	}
 }
-*/
